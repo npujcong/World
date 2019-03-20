@@ -82,6 +82,12 @@ namespace {
      *   @param nbit : the number of bits to code the signal
      *   @param x_length : the number of samples
      */
+    std::ifstream::pos_type filesize(const char* filename)
+    {
+        std::ifstream in(filename, std::ifstream::binary | std::ifstream::ate);
+        return in.tellg();
+    }
+
     void DisplayInformation(int fs, int nbit, int x_length)
     {
         std::cout << "File information" << std::endl;
@@ -248,9 +254,9 @@ namespace {
  */
 int main(int argc, char *argv[])
 {
-    if (argc != 5)
+    if (argc != 6)
     {
-        std::cerr << argv[0] << "<input_wav_file> <output_f0_file> <output_spectrum_file> <output_aperiodicity_file>" << std::endl;
+        std::cerr << argv[0] << "<input_wav_file> <output_f0_file> <output_spectrum_file> <output_aperiodicity_file> <input_f0_file>" << std::endl;
         return EXIT_FAILURE;
     }
 
@@ -290,8 +296,20 @@ int main(int argc, char *argv[])
     //---------------------------------------------------------------------------
 
     // F0 estimation
-    F0Estimation(x, x_length, &world_parameters);
-
+    // F0Estimation(x, x_length, &world_parameters);
+    world_parameters.f0_length = filesize(argv[5]) / sizeof(double);
+    world_parameters.f0 = new double[world_parameters.f0_length];
+    std::ifstream is_f0(argv[5], std::ios::binary | std::ios::in);
+    if ( !is_f0.is_open() ){
+        std::cout << "not open file..." << std::endl;
+        return false;
+    }
+    is_f0.read(reinterpret_cast<char*>(world_parameters.f0),
+               std::streamsize(world_parameters.f0_length*sizeof(double)));
+    is_f0.close();
+    world_parameters.time_axis = new double[world_parameters.f0_length];
+    for (int i = 0; i < world_parameters.f0_length; ++i)
+      world_parameters.time_axis[i] = i * world_parameters.frame_period / 1000.0;
     // Spectral envelope estimation
     SpectralEnvelopeEstimation(x, x_length, &world_parameters);
 
@@ -323,14 +341,6 @@ int main(int argc, char *argv[])
         std::cerr << "Cannot open file: " << argv[3] << std::endl;
         return EXIT_FAILURE;
     }
-
-    // write the sampling frequency
-    out_spectrogram.write(reinterpret_cast<const char*>(&world_parameters.fs),
-                 std::streamsize( sizeof(world_parameters.fs) ) );
-
-    // write the sampling frequency
-    out_spectrogram.write(reinterpret_cast<const char*>(&world_parameters.frame_period),
-                 std::streamsize( sizeof(world_parameters.frame_period) ) );
 
     // write the spectrogram data
     for (int i=0; i<world_parameters.f0_length; i++)
